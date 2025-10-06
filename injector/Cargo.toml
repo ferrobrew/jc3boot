@@ -1,0 +1,11 @@
+[package]
+name = "jc3boot_injector"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+dunce = { workspace = true }
+re-utilities-injector = { workspace = true }
+windows = { workspace = true }
