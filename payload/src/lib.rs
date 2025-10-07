@@ -7,14 +7,19 @@ use detours_macro::detour;
 use re_utilities::{
     ThreadSuspender,
     hook_library::{HookLibraries, HookLibrary},
+    retour::GenericDetour,
 };
-use windows::Win32::{
-    Foundation::HINSTANCE,
-    System::{
-        LibraryLoader::DisableThreadLibraryCalls,
-        Memory::{PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtect},
-        SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
+use windows::{
+    Win32::{
+        Foundation::{HINSTANCE, HWND},
+        System::{
+            LibraryLoader::{DisableThreadLibraryCalls, GetModuleHandleA, GetProcAddress},
+            Memory::{PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, VirtualProtect},
+            SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
+        },
+        UI::WindowsAndMessaging::{HMENU, MB_OK, MessageBoxW},
     },
+    core::{HSTRING, PCSTR, s},
 };
 
 #[unsafe(no_mangle)]
@@ -62,15 +67,17 @@ pub fn install() {
     }
 
     let mut patcher = re_utilities::Patcher::new();
-    let hook_libraries = re_utilities::ThreadSuspender::for_block(|| {
-        HookLibraries::new([
-            denuvo_hook_library(),
-            // intro_skip_hook_library(),
-            // offline_mode_hook_library(),
-        ])
-        .enable(&mut patcher)
-    })
-    .unwrap();
+    let hook_libraries = ThreadSuspender::for_block(|| {
+        HookLibraries::new([denuvo_hook_library(), create_window_ex_a_hook_library()])
+            .enable(&mut patcher)
+    });
+    let hook_libraries = match hook_libraries {
+        Ok(hook_libraries) => hook_libraries,
+        Err(err) => {
+            message_box("Error in jc3boot hooks", &err.to_string());
+            return;
+        }
+    };
     let _ = STARTUP_HOOK_LIBRARIES.set(StartupHookLibraries {
         patcher: Mutex::new(patcher),
         hook_libraries,
@@ -107,26 +114,132 @@ fn denuvo_hook_library() -> HookLibrary {
         .with_patch_ret_one(0x145D8E060)
 }
 
+type CreateWindowExASignature = unsafe extern "C" fn(
+    u32,
+    PCSTR,
+    PCSTR,
+    u32,
+    i32,
+    i32,
+    i32,
+    i32,
+    HWND,
+    HMENU,
+    HINSTANCE,
+    *mut c_void,
+) -> HWND;
+static CREATE_WINDOW_EX_A: OnceLock<GenericDetour<CreateWindowExASignature>> = OnceLock::new();
+
+fn create_window_ex_a_hook_library() -> HookLibrary {
+    HookLibrary::new()
+        // CreateWindowExA
+        .with_callbacks(
+            || unsafe {
+                if CREATE_WINDOW_EX_A.get().is_none() {
+                    let module = GetModuleHandleA(s!("user32.dll"))?;
+                    let address = GetProcAddress(module, s!("CreateWindowExA"));
+
+                    #[allow(clippy::missing_transmute_annotations)]
+                    let detour = GenericDetour::<CreateWindowExASignature>::new(
+                        std::mem::transmute(address),
+                        create_window_ex_a_hook,
+                    )?;
+                    CREATE_WINDOW_EX_A
+                        .set(detour)
+                        .expect("detour already bound");
+                }
+
+                Ok(CREATE_WINDOW_EX_A.get().unwrap().enable()?)
+            },
+            || unsafe {
+                CREATE_WINDOW_EX_A.get().unwrap().disable()?;
+                Ok(())
+            },
+        )
+}
+
+extern "C" fn create_window_ex_a_hook(
+    dw_ex_style: u32,
+    lp_class_name: PCSTR,
+    lp_window_name: PCSTR,
+    dw_style: u32,
+    x: i32,
+    y: i32,
+    n_width: i32,
+    n_height: i32,
+    h_wnd_parent: HWND,
+    h_menu: HMENU,
+    h_instance: HINSTANCE,
+    lp_param: *mut c_void,
+) -> HWND {
+    if unsafe { lp_class_name.to_string() } == Ok("JC3".to_string()) {
+        install_postinit();
+    }
+
+    unsafe {
+        CREATE_WINDOW_EX_A.get().unwrap().call(
+            dw_ex_style,
+            lp_class_name,
+            lp_window_name,
+            dw_style,
+            x,
+            y,
+            n_width,
+            n_height,
+            h_wnd_parent,
+            h_menu,
+            h_instance,
+            lp_param,
+        )
+    }
+}
+
+static POSTINIT_HOOK_LIBRARIES: OnceLock<PostInitHookLibraries> = OnceLock::new();
+struct PostInitHookLibraries {
+    _patcher: Mutex<re_utilities::Patcher>,
+    _hook_libraries: HookLibraries,
+}
+// Only used upon DLL load/unload, so it's fine to be Send/Sync
+unsafe impl Send for PostInitHookLibraries {}
+unsafe impl Sync for PostInitHookLibraries {}
+
+pub fn install_postinit() {
+    let mut patcher = re_utilities::Patcher::new();
+    let hook_libraries = ThreadSuspender::for_block(|| {
+        HookLibraries::new([intro_skip_hook_library(), offline_mode_hook_library()])
+            .enable(&mut patcher)
+    });
+    let hook_libraries = match hook_libraries {
+        Ok(hook_libraries) => hook_libraries,
+        Err(err) => {
+            message_box("Error in jc3boot hooks", &err.to_string());
+            return;
+        }
+    };
+    let _ = POSTINIT_HOOK_LIBRARIES.set(PostInitHookLibraries {
+        _patcher: Mutex::new(patcher),
+        _hook_libraries: hook_libraries,
+    });
+}
+
 fn intro_skip_hook_library() -> HookLibrary {
     HookLibrary::new()
         // CTitleUi::IsIntroMovieComplete
-        .with_patch_ret_zero(0x144883F60)
+        .with_patch_ret_one(0x144883F60)
         // CTitleUi::PlayIntroVideo
         .with_immediate_ret(0x1448AB620)
 }
 
 fn offline_mode_hook_library() -> HookLibrary {
     HookLibrary::new()
-        // CGameInstance::IsOfflineMode
-        .with_patch_ret_zero(0x1445A8220)
-        // CGameStateFrontend::BeginLogin
-        .with_static_binder(&GAME_STATE_FRONTEND_BEGIN_LOGIN_BINDER)
+        // CLoginManager::Login
+        .with_static_binder(&LOGIN_MANAGER_LOGIN_BINDER)
 }
 
-#[detour(address = 0x143_D25_650)]
-extern "C" fn game_state_frontend_begin_login(this: *mut c_void, _mode: u32) {
-    // Always begin login in offline mode
-    GAME_STATE_FRONTEND_BEGIN_LOGIN.get().unwrap().call(this, 1);
+#[detour(address = 0x143_EC4_320)]
+extern "C" fn login_manager_login(this: *mut c_void, _mode: u32) -> bool {
+    // Always login in offline mode
+    LOGIN_MANAGER_LOGIN.get().unwrap().call(this, 1)
 }
 
 trait HookLibraryExt {
@@ -143,5 +256,11 @@ impl HookLibraryExt for HookLibrary {
     }
     fn with_patch_ret_one(self, address: usize) -> Self {
         self.with_patch(address, &[0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00, 0xC3])
+    }
+}
+
+fn message_box(title: &str, message: &str) {
+    unsafe {
+        MessageBoxW(None, &HSTRING::from(message), &HSTRING::from(title), MB_OK);
     }
 }
