@@ -76,14 +76,19 @@ fn inject(
     dont_resume: bool,
 ) -> anyhow::Result<()> {
     println!("Injecting into process with PID {}", pi.process_id);
-    let payload_path = injector::inject(*pi.process, &payload_path).context("failed to inject")?;
+    let payload_path = injector::inject(*pi.process, payload_path).context("failed to inject")?;
 
     println!("Running payload");
     let payload_base = injector::get_remote_module_base(pi.process_id, &payload_path)
         .context("failed to get payload base")?
         .context("payload base is null")?;
-    injector::call_remote_export(*pi.process, payload_base, "run")
-        .context("failed to call payload run")?;
+    injector::call_remote_export(
+        *pi.process,
+        payload_base,
+        "run",
+        Some(std::time::Duration::from_secs(10)),
+    )
+    .context("failed to call payload run")?;
 
     // Processes are resumed after injection to ensure the payload is loaded before the game
     if !dont_resume {
