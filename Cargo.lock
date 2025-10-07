@@ -149,7 +149,7 @@ checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 [[package]]
 name = "detours-macro"
 version = "0.1.0"
-source = "git+https://github.com/ferrobrew/re-utilities.git#98e83b702ac8bce974cf3db5248cd2f8083c0c84"
+source = "git+https://github.com/ferrobrew/re-utilities.git#31195b93cc5ba8135423117420bbe99588e1df16"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -233,7 +233,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "dunce",
  "re-utilities-injector",
  "windows 0.58.0",
 ]
@@ -368,7 +367,7 @@ dependencies = [
 [[package]]
 name = "re-utilities"
 version = "0.1.0"
-source = "git+https://github.com/ferrobrew/re-utilities.git#98e83b702ac8bce974cf3db5248cd2f8083c0c84"
+source = "git+https://github.com/ferrobrew/re-utilities.git#31195b93cc5ba8135423117420bbe99588e1df16"
 dependencies = [
  "anyhow",
  "patternscan",
@@ -379,7 +378,7 @@ dependencies = [
 [[package]]
 name = "re-utilities-injector"
 version = "0.1.0"
-source = "git+https://github.com/ferrobrew/re-utilities.git#98e83b702ac8bce974cf3db5248cd2f8083c0c84"
+source = "git+https://github.com/ferrobrew/re-utilities.git#31195b93cc5ba8135423117420bbe99588e1df16"
 dependencies = [
  "anyhow",
  "dunce",
