@@ -17,7 +17,7 @@ mod util;
 pub extern "system" fn DllMain(module: HINSTANCE, reason: u32, _unk: *mut c_void) -> bool {
     if reason == DLL_PROCESS_ATTACH {
         unsafe {
-            DisableThreadLibraryCalls(module).ok();
+            DisableThreadLibraryCalls(module.into()).ok();
         };
     } else if reason == DLL_PROCESS_DETACH {
         postinit::uninstall();

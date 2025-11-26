@@ -20,8 +20,10 @@ unsafe impl Sync for PostInitHookLibraries {}
 pub fn install() {
     let mut patcher = re_utilities::Patcher::new();
     let hook_libraries = ThreadSuspender::for_block(|| {
-        HookLibraries::new([intro_skip_hook_library(), offline_mode_hook_library()])
-            .enable(&mut patcher)
+        Ok(
+            HookLibraries::new([intro_skip_hook_library(), offline_mode_hook_library()])
+                .enable(&mut patcher)?,
+        )
     });
     let hook_libraries = match hook_libraries {
         Ok(hook_libraries) => hook_libraries,
@@ -39,8 +41,9 @@ pub fn install() {
 pub fn uninstall() {
     let pl = POSTINIT_HOOK_LIBRARIES.get().unwrap();
     let _ = ThreadSuspender::for_block(|| {
-        pl._hook_libraries
-            .set_enabled(&mut pl._patcher.lock().unwrap(), false)
+        Ok(pl
+            ._hook_libraries
+            .set_enabled(&mut pl._patcher.lock().unwrap(), false)?)
     });
 }
 
