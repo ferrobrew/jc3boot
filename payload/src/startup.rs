@@ -3,10 +3,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use crate::{
-    postinit,
-    util::{self, HookLibraryExt as _},
-};
+use crate::{postinit, util};
 use re_utilities::{
     ThreadSuspender,
     hook_library::{HookLibraries, HookLibrary},
@@ -33,10 +30,7 @@ unsafe impl Sync for StartupHookLibraries {}
 pub fn install() {
     let mut patcher = re_utilities::Patcher::new();
     let hook_libraries = ThreadSuspender::for_block(|| {
-        Ok(
-            HookLibraries::new([denuvo_hook_library(), create_window_ex_a_hook_library()])
-                .enable(&mut patcher)?,
-        )
+        Ok(HookLibraries::new([create_window_ex_a_hook_library()]).enable(&mut patcher)?)
     });
     let hook_libraries = match hook_libraries {
         Ok(hook_libraries) => hook_libraries,
@@ -58,28 +52,6 @@ pub fn uninstall() {
             .hook_libraries
             .set_enabled(&mut shl.patcher.lock().unwrap(), false)?)
     });
-}
-
-fn denuvo_hook_library() -> HookLibrary {
-    HookLibrary::new()
-        // Debug Registers
-        .with_patch_ret_one(0x145D8DB00)
-        // RtlCreateQueryDebugBuffer
-        .with_patch_ret_zero(0x145D8DC30)
-        // UmsInfo
-        .with_patch_ret_one(0x145D8DCC0)
-        // AlignmentFaultFixup
-        .with_patch_ret_zero(0x145D8DD20)
-        // NtGlobalFlag
-        .with_patch_ret_zero(0x145D8DEB0)
-        // Denuvo::ThreadHideFromDebugger2
-        .with_patch_ret_zero(0x145D8DEF0)
-        // Denuvo::ThreadHideFromDebugger
-        .with_patch_ret_zero(0x145D8DF20)
-        // DbgUiRemoteBreakin
-        .with_patch_ret_one(0x145D8DF80)
-        // DbgUiIssueRemoteBreakin
-        .with_patch_ret_one(0x145D8E060)
 }
 
 type CreateWindowExASignature = unsafe extern "C" fn(

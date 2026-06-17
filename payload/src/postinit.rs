@@ -49,10 +49,10 @@ pub fn uninstall() {
 
 fn intro_skip_hook_library() -> HookLibrary {
     HookLibrary::new()
-        // CTitleUi::IsIntroMovieComplete
-        .with_patch_ret_one(0x144883F60)
-        // CTitleUi::PlayIntroVideo
-        .with_immediate_ret(0x1448AB620)
+        // CTitleUI::IsIntroMovieComplete
+        .with_patch_ret_one(0x140F46300)
+        // CTitleUI::PlayIntroVideo
+        .with_immediate_ret(0x140F68220)
 }
 
 fn offline_mode_hook_library() -> HookLibrary {
@@ -61,7 +61,7 @@ fn offline_mode_hook_library() -> HookLibrary {
         .with_static_binder(&LOGIN_MANAGER_LOGIN_BINDER)
 }
 
-#[detour(address = 0x143_EC4_320)]
+#[detour(address = 0x140_B59_520)]
 extern "C" fn login_manager_login(this: *mut std::ffi::c_void, _mode: u32) -> bool {
     // Always login in offline mode
     LOGIN_MANAGER_LOGIN.get().unwrap().call(this, 1)
