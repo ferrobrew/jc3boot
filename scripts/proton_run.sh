@@ -56,6 +56,18 @@ if [ ${#inj_args[@]} -eq 0 ]; then
   inj_args=(--spawn "$GAME")
 fi
 
+# Forward caller-requested environment variables into the container. The caller
+# names them in JC3BOOT_FORWARD_ENV (space-separated variable names); each set one
+# is passed explicitly to the sniper entry point. This is needed because steam-run
+# scrubs the ambient environment before the sniper, so exported variables that the
+# entry point itself reads (e.g. PRESSURE_VESSEL_*) do not otherwise reach it. The
+# launcher stays service-agnostic: it forwards whatever the caller asks for without
+# knowing what it is.
+forward_env=()
+for _name in ${JC3BOOT_FORWARD_ENV:-}; do
+  [ -n "${!_name+set}" ] && forward_env+=("$_name=${!_name}")
+done
+
 # Container layout:
 #   [gamescope ->] steam-run -> sniper -> launcher service -> proton -> injector
 # The launcher service claims $BUS on the session bus and keeps the container
@@ -65,6 +77,7 @@ fi
 # the game inside this same wineserver).
 launch=(
   steam-run env
+  "${forward_env[@]}"
   STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM"
   STEAM_COMPAT_DATA_PATH="$STEAM/steamapps/compatdata/$APPID"
   STEAM_COMPAT_APP_ID="$APPID" SteamAppId="$APPID" SteamGameId="$APPID"
