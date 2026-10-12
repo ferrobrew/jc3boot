@@ -22,8 +22,8 @@
 # On NixOS the whole thing runs under `steam-run` because pressure-vessel/bwrap
 # needs an FHS env (/usr/bin/true etc.) the system doesn't provide.
 #
-# Overridable via env: STEAM_ROOT, JC3_APPID, PROTON_DIR, JC3_EXE, JC3_BUS_NAME,
-# GAMESCOPE_OPTS.
+# Overridable via env: STEAM_ROOT, JC3_APPID, PROTON_DIR, JC3_LIBRARY, JC3_EXE,
+# JC3_BUS_NAME, GAMESCOPE_OPTS.
 # Any args passed to this script replace the default injector args
 # (`--spawn <JC3_EXE>`), except `--gamescope` (or `--gamescope=<opts>`), which is
 # pulled out and instead wraps the whole launch in gamescope -- its own nested
@@ -36,7 +36,21 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STEAM="${STEAM_ROOT:-$HOME/.steam/steam}"
 APPID="${JC3_APPID:-225540}"
 PROTON="${PROTON_DIR:-$STEAM/steamapps/common/Proton - Experimental}"
-GAME="${JC3_EXE:-$STEAM/steamapps/common/Just Cause 3/JustCause3.exe}"
+
+# The game and its compatdata live in whichever Steam library the game is
+# installed to, which need not be the Steam root (Proton and the runtime stay in
+# the root). Find it from libraryfolders.vdf, falling back to the root.
+find_library() {
+  awk -v app="\"$APPID\"" '
+    /"path"/ { p = $0; sub(/^[^"]*"path"[ \t]*"/, "", p); sub(/"[ \t]*$/, "", p) }
+    $1 == app { print p; exit }
+  ' "$STEAM/steamapps/libraryfolders.vdf" 2>/dev/null
+}
+LIBRARY="${JC3_LIBRARY:-$(find_library)}"
+LIBRARY="${LIBRARY:-$STEAM}"
+COMPAT_DATA="$LIBRARY/steamapps/compatdata/$APPID"
+GAME="${JC3_EXE:-$LIBRARY/steamapps/common/Just Cause 3/JustCause3.exe}"
+[ -d "$COMPAT_DATA" ] || { echo "proton_run.sh: no compatdata for app $APPID at $COMPAT_DATA (launch the game from Steam once, or set JC3_LIBRARY)" >&2; exit 1; }
 BUS="${JC3_BUS_NAME:-com.jc3boot.JustCause3}"
 SNIPER="$STEAM/steamapps/common/SteamLinuxRuntime_sniper/_v2-entry-point"
 INJECTOR="$DIR/target/x86_64-pc-windows-msvc/debug/jc3boot_injector.exe"
@@ -83,7 +97,7 @@ launch=(
   steam-run env
   "${forward_env[@]}"
   STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM"
-  STEAM_COMPAT_DATA_PATH="$STEAM/steamapps/compatdata/$APPID"
+  STEAM_COMPAT_DATA_PATH="$COMPAT_DATA"
   STEAM_COMPAT_APP_ID="$APPID" SteamAppId="$APPID" SteamGameId="$APPID"
   "$SNIPER" --verb=waitforexitandrun --
   steam-runtime-launcher-service --bus-name="$BUS" --hint --
